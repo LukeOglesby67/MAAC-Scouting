@@ -40,9 +40,12 @@ make test
 
 ## Status
 
-Scaffolded, nothing implemented. `docs/decisions.md` is the running log of choices and why.
+Probe is done and it came back good: substitution events are present and
+reconstructable for MAAC games (99% of game-teams walk clean), and field-goal
+coordinates are real 99.8% of the time. The lineup track is on.
+`docs/decisions.md` is the running log of choices and why.
 
-- [ ] Probe: confirm substitution events and shot coordinates for MAAC games
+- [x] Probe: substitutions and coordinates confirmed for MAAC ([findings](docs/decisions.md))
 - [ ] wehoop release ingestion
 - [ ] Staging: typed, ordered, MAAC-filtered events
 - [ ] Games mart

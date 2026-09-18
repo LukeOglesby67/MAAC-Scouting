@@ -71,3 +71,113 @@ dashboard or web app.
 analytics work is building a beautiful interactive tool nobody opens.
 
 **Rules out.** Any web frontend in this repo.
+
+---
+
+## 2026-09-18 — Probe result: lineup reconstruction is viable
+
+**Decision.** Build the lineup track. The report is not pivoting to tendencies-only.
+
+**Why.** `make probe` against the completed 2026 season (2,824,090 rows, 6,011
+games; 262 of them MAAC):
+
+- `Substitution` is the single most common event type in the whole feed —
+  795,380 rows league-wide, 37,280 across MAAC games, ~142 per game.
+- Every sub row carries `athlete_id_1` (100%) and its direction parses out of
+  `text` (100%, "subbing in" / "subbing out", 18,640 each).
+- In/out counts balance exactly for 524 of 524 MAAC game-teams.
+- Walking the events from a starter seed leaves exactly five on the floor at
+  99.73% of stoppages, and 519 of 524 game-teams are clean end to end.
+- Contradictions across 37,280 events: 25 subbed in while already on, 26 subbed
+  out while not on. 0.14%.
+
+Coverage is a full season per team, 29–34 games, home and away.
+
+**Rules out.** The fallback plan. `analysis/tendencies.py` stays in the report on
+its own merits, not as a hedge.
+
+**Accepts.** ~1% of game-teams need a dirty-data policy. Small enough to decide
+deliberately rather than architect around.
+
+---
+
+## 2026-09-18 — Seed the five from `game_rosters`, not the box score
+
+**Decision.** Period-start lineups seed from the `game_rosters` dataset's
+`starter` boolean.
+
+**Why.** It is an explicit flag rather than something inferred from minutes, and
+it is exactly five players for 12,055 of 12,058 game-teams league-wide. All 524
+MAAC game-teams got a seed, so the walk never had to guess a starting point.
+
+**Rules out.** Inferring starters from `player_box` minutes, and trusting
+period-start substitution events, which are the ones ESPN drops.
+
+---
+
+## 2026-09-18 — Check the lineup invariant at stoppages, not at every event
+
+**Decision.** "Exactly five on the floor" is asserted after each batch of
+substitutions sharing a `(period_number, clock_display_value)`, not after each
+substitution row.
+
+**Why.** ESPN writes a substitution as several one-athlete rows in sequence —
+two "subbing out" then two "subbing in". Mid-batch the set is legitimately at
+three or four. Checking per row reports 22,443 violations and zero clean
+game-teams; checking per batch reports 35 violations and 99% clean. The naive
+check would have condemned data that is actually fine.
+
+**Rules out.** Any per-event validation, and the conclusion it would have led to.
+
+---
+
+## 2026-09-18 — Shot coordinates: use the raw frame, fold the translated one
+
+**Decision.** Shot location comes from `coordinate_x_raw` / `coordinate_y_raw`,
+with the basket at (25, 0). Free throws are excluded from anything spatial.
+
+**Why.** Two traps, both of which read as "fine" if you check `notna()`:
+
+1. Coordinates are never null. ESPN encodes a miss as an int32-min sentinel or
+   parks it at (25, 0). 98.9% of made free throws sit at (25, 0) — they have no
+   location. On field-goal attempts only, 99.8% of coordinates are real.
+2. CLAUDE.md warned the raw frame was geometrically wrong. It is not. Against
+   the 22.15 ft arc, 3PA median 24.7 ft, 0.1% of threes fall inside the line,
+   0.5% of twos outside it. That separation is as clean as this gets.
+
+The `coordinate_x` / `coordinate_y` columns are not broken either, but they are a
+**full-court** frame with baskets at (±41.75, 0). Folded to the nearer basket
+they reproduce the raw numbers exactly. Measured from the origin they look like
+garbage, because the origin is centre court.
+
+**Rules out.** Building a backboard-overhang correction that was never needed.
+
+---
+
+## 2026-09-18 — Release assets live in a different repo than assumed
+
+**Decision.** Ingest pulls from `sportsdataverse/sportsdataverse-data` release
+tags, one tag per dataset, asset stem `{dataset}_{season}.parquet`.
+
+**Why.** `wehoop-wbb-data` builds the data but publishes it elsewhere. Its own
+`docs/datasets/*.md` name the tag for each dataset. Both are now in
+`config/sources.yml`, so no URL is hardcoded.
+
+**Also corrected.** pbp is 51–92 MB per season as parquet, not 1–2 GB, and 2.8M
+rows, not 7M. The season is cheap enough to hold locally. Season 2027 is not
+published yet, as expected in September.
+
+**Rules out.** Guessing at a release URL, and the size-driven caution that was
+shaping the ingest design.
+
+---
+
+## 2026-09-18 — Canisius was missing from the MAAC filter
+
+**Decision.** Added Canisius. The conference filter is 13 teams.
+
+**Why.** The config listed 12. Canisius is in the feed with 29 games. A missing
+team is a silently empty report for a real opponent.
+
+**Verified.** All 13 config names match ESPN's `home_team_name` /
+`away_team_name` exactly, so no alias table is needed yet.
