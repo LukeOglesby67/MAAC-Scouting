@@ -14,18 +14,16 @@ Usage:
     python scripts/probe_pbp.py [--season 2026]
 """
 import argparse
-import urllib.request
+import sys
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from scout.config import load, RAW  # noqa: E402
-
-CACHE = RAW / "_probe_cache"
+from scout.config import load  # noqa: E402
+from scout.ingest.wehoop import fetch  # noqa: E402
 
 # NCAA women's three-point line. Used to sanity check the coordinate frame:
 # if the geometry is right, threes sit outside it and twos inside.
@@ -33,26 +31,6 @@ THREE_ARC, THREE_CORNER = 22.15, 21.65
 # ESPN encodes "no coordinate" two ways, neither of them null.
 SENTINEL = -2e8          # int32 minimum leaking through as a float
 NULL_ISLAND = (25.0, 0.0)  # raw-frame centre point, used for free throws
-
-
-def asset_url(dataset: str, season: int) -> str:
-    cfg = load()["wbb"]
-    return f"{cfg['release_base']}/{cfg['release_tags'][dataset]}/{cfg['file_stems'][dataset]}_{season}.parquet"
-
-
-def fetch(url: str) -> Path:
-    """Download once, reuse after. 50-90 MB per season; no point re-pulling."""
-    CACHE.mkdir(parents=True, exist_ok=True)
-    dest = CACHE / url.rsplit("/", 1)[-1]
-    if dest.exists():
-        print(f"using cached {dest.name} ({dest.stat().st_size / 1e6:.0f} MB)")
-        return dest
-    print(f"downloading {url}")
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    urllib.request.urlretrieve(url, tmp)
-    tmp.rename(dest)
-    print(f"cached -> {dest.name} ({dest.stat().st_size / 1e6:.0f} MB)")
-    return dest
 
 
 def maac_games(pbp: pd.DataFrame, teams: list[str]) -> pd.DataFrame:
@@ -183,7 +161,7 @@ def main() -> None:
     args = ap.parse_args()
 
     teams = load()["maac"]["teams"]
-    pbp = pd.read_parquet(fetch(asset_url("pbp", args.season)))
+    pbp = fetch("pbp", args.season)
     print(f"\nloaded {len(pbp):,} rows, {pbp.game_id.nunique():,} games "
           f"(season {args.season})")
 
@@ -192,7 +170,7 @@ def main() -> None:
     print(f"\nMAAC-involved: {len(m):,} rows, {m.game_id.nunique():,} games")
     check_coverage(pbp, teams)
 
-    rosters = pd.read_parquet(fetch(asset_url("game_rosters", args.season)))
+    rosters = fetch("game_rosters", args.season)
     check_subs(m, rosters[rosters.game_id.isin(set(m.game_id))])
     check_coords(m)
 

@@ -46,7 +46,7 @@ coordinates are real 99.8% of the time. The lineup track is on.
 `docs/decisions.md` is the running log of choices and why.
 
 - [x] Probe: substitutions and coordinates confirmed for MAAC ([findings](docs/decisions.md))
-- [ ] wehoop release ingestion
+- [x] wehoop release ingestion (4 datasets x 3 seasons, schema-verified)
 - [ ] Staging: typed, ordered, MAAC-filtered events
 - [ ] Games mart
 - [ ] Lineup reconstruction from substitutions

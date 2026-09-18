@@ -244,3 +244,66 @@ rather than to the five-on-the-floor invariant.
 defensible while it stays negligible; if a future run wants to drop meaningfully
 more, that is a parser regression hiding behind the policy, and the build should
 fail rather than quietly report on less of the season than it claims.
+
+---
+
+## 2026-09-18 — Ingest reads with the pyarrow dtype backend
+
+**Decision.** `fetch()` reads with `dtype_backend="pyarrow"`.
+
+**Why.** This is a correctness fix, not a preference. pandas' default numpy
+backend has no nullable integer type, so any id column containing a null comes
+back as `float64`. `game_rosters.athlete_id` is `int32` upstream with two nulls
+in 2026, and the default read lands it as `double` — silently, with a pipeline
+that looks clean.
+
+That is both a rule-2 violation (type coercion at ingest) and a live bug:
+`athlete_id` is the join key between the lineup walk, `player_box`, and every
+per-player number on the report. A float join key is the kind of thing that
+half-works for a season and then produces a report with a player missing.
+
+**Verified.** All 12 landed extracts now match upstream column for column and
+type for type, with exactly three added columns: `_source`, `_season`,
+`_ingested_at`.
+
+**Rules out.** Default-backend reads anywhere in ingest.
+
+---
+
+## 2026-09-18 — Cache by ETag, not by file existence
+
+**Decision.** Downloads are cached in `data/raw/_cache` and revalidated with a
+conditional GET (`If-None-Match`) against the stored ETag.
+
+**Why.** The upstream feed rebuilds daily during the season. A plain "skip if the
+file exists" cache is correct in September and quietly serves stale data in
+January, which is exactly when the reports matter. A 304 costs one request and
+no transfer, so the cheap path stays cheap: a full re-run against warm cache is
+about 5 seconds instead of a 200 MB pull.
+
+**Note.** The cache is not the raw layer. `data/raw/_cache` holds upstream bytes;
+`data/raw/wbb/` holds what `land()` wrote with provenance. `make clean-cache`
+drops the former only.
+
+---
+
+## 2026-09-18 — pbp schema drifts across seasons
+
+**Finding, not yet a decision.** The pbp schema is not stable across the three
+configured seasons. 2024 and 2025 are identical to each other; 2026 differs:
+
+    only in 2026:  espn_home_wp, espn_away_wp, espn_tie_percentage,
+                   points_attempted, short_description
+    only in 2024:  media_id
+
+`points_attempted` is the one that bites. The probe used it to separate twos
+from threes for the geometry check, and it does not exist before 2026. Staging
+either derives shot value from `type_text` / `score_value` for the older seasons
+or accepts that anything built on `points_attempted` is 2026-only.
+
+**Why it is here.** Landing raw made this visible immediately instead of at the
+point where staging concatenates three seasons and pandas fills two of them with
+nulls without complaining. This is the argument for rule 2 in miniature.
+
+**Open.** Which way staging resolves it. Deriving shot value looks
+straightforward, but it is a definition question, so it is yours.
