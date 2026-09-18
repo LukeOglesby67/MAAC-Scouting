@@ -1,0 +1,24 @@
+wbb:
+  name: wehoop-wbb-data
+  # Processed release artifacts from github.com/sportsdataverse/wehoop-wbb-data
+  # Confirm the release tag and asset filename pattern, then fill in.
+  release_base: ""
+  datasets: [pbp, team_box, player_box]
+  seasons: [2024, 2025, 2026]   # every season is ~7M rows; do not pull all of them
+  raw_path: data/raw/wbb
+
+maac:
+  # Confirm exact ESPN team naming before relying on this filter.
+  teams:
+    - Quinnipiac
+    - Fairfield
+    - Iona
+    - Manhattan
+    - Marist
+    - Merrimack
+    - Mount St. Mary's
+    - Niagara
+    - Rider
+    - Sacred Heart
+    - Saint Peter's
+    - Siena
