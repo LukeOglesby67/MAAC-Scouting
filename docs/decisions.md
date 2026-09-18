@@ -181,3 +181,66 @@ team is a silently empty report for a real opponent.
 
 **Verified.** All 13 config names match ESPN's `home_team_name` /
 `away_team_name` exactly, so no alias table is needed yet.
+
+---
+
+## 2026-09-18 — Test suite rewritten for this project
+
+**Decision.** `tests/test_data_quality.py` tests scouting marts.
+
+**Why.** The original was copied from the league-equivalency scaffold and
+tested player-season uniqueness, draft-year holdout leakage, and transition
+ordering, none of which exist here. Tests that validate the wrong project are
+worse than no tests: they pass, and they imply coverage that is not there.
+
+**What it tests now.** The five-per-lineup invariant, sub direction balance,
+box-score seeding, stint durations summing to game time, possession
+single-attribution, contradiction auditability, and floors pinned to the
+probe's observed 99.0% / 99.73%.
+
+**Note.** `test_maac_filter_covers_all_teams` originally read "all twelve MAAC
+programs." The conference has thirteen and Canisius was the missing one — the
+exact failure that test exists to catch, encoded as its own baseline. The count
+now comes from config.
+
+---
+
+## 2026-09-18 — Dirty substitution policy: drop, at stint granularity
+
+**Decision.** A stint is excluded from the marts if and only if its on-court set
+is not exactly five. Contradictions that leave the set at five are logged and
+kept. Excluded stints are written to an audit table with `game_id`, team, and
+event index — never silently swallowed.
+
+**Why drop rather than interpolate.** Interpolating a lineup means inventing
+five players who were never observed on the floor, then attributing real
+possessions and real points to them. Those possessions flow into a lineup rating
+that a coaching staff reads as fact. For the volume involved, the guess is worth
+less than the gap, and a gap is auditable in a way a guess is not.
+
+**Why stint granularity and not game-team.** The headline "~1% of game-teams are
+dirty" overstates the cost by more than an order of magnitude. Measured on the
+2026 season:
+
+- 8 game-teams are affected, but 5 are **non-MAAC opponents** — Richmond,
+  Dartmouth, UMass Boston, Mercy, Georgetown. Their lineups are not on the
+  report. Richmond alone is 35.9 of the 53.9 corrupt minutes and is irrelevant
+  to every scouting question this project asks.
+- Of the 3 MAAC-side cases, 2 are **size-preserving**: Sacred Heart logs 12
+  contradictions and Iona 2, and in both the on-court set is correct for the
+  entire game. The contradictions pair off and self-correct. Dropping on
+  contradiction count would discard two clean games and fix nothing.
+- That leaves **one** MAAC game-team with genuinely wrong floor time: Canisius,
+  6.3 minutes in game 401813890.
+
+So the real exposure is **6.3 team-minutes out of ~15,720, or 0.04%** — not 1%.
+Dropping at game-team granularity would discard ~120 team-minutes to repair 6.3,
+a 19x overcorrection, and would throw away two games that are entirely correct.
+
+**Rules out.** Interpolation, and any handling keyed to contradiction counts
+rather than to the five-on-the-floor invariant.
+
+**Guarded by.** `MAX_DROPPED_FLOOR_SHARE` in the test suite. Dropping is only
+defensible while it stays negligible; if a future run wants to drop meaningfully
+more, that is a parser regression hiding behind the policy, and the build should
+fail rather than quietly report on less of the season than it claims.
